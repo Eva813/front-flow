@@ -1,9 +1,9 @@
 ---
-name: vue3-layout
+name: vue-layout
 description: "Vue 3 + SCSS 切版技能（切版 Agent）。當使用者提供 Figma 連結或設計稿 spec，需要產出 Vue 3 純展示元件（Dumb Components）時使用。觸發情境包含：「幫我切版」、「根據 Figma 產出元件」、「根據 spec 建立 UI」、「幫我建 Vue 元件」、「切這個畫面」、有提到 Figma URL 或 Node ID 加上 Vue/元件/切版等字詞。僅產出 props/emits 介面的純 UI 結構，不含 API 呼叫或業務邏輯。"
 ---
 
-# vue3-layout Skill（切版 Agent）
+# vue-layout Skill（切版 Agent）
 
 ## 1) 目標
 
