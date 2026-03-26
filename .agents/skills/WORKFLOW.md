@@ -8,9 +8,9 @@
 ## 整體流程一覽
 
 ```
-[你] 提供 User Story + Figma + OpenAPI
+[你] 提供 Figma
         ↓
-[ai-pm]  逆向推導規格，產出 draft-spec.md
+[ai-pm]  逆向推導規格（基於 Figma），產出 draft-spec.md
         ↓
 [斷點 A] 你審閱草稿，回覆「Approve」
         ↓
@@ -18,32 +18,32 @@
         ↓
 [斷點 B] 你預覽畫面，回覆「Continue」
         ↓
+[✨ api-enrichment]  補充 API、資料模型、State 結構（新步驟）
+        ↓
 [logic-coder]  注入 API 邏輯、狀態管理
         ↓
 [你] 取得 diff 摘要，進行 code review
 ```
 
-一次完整執行大約涉及 **2 個人工確認點**（斷點 A / B）。每個斷點都是你可以修正方向的機會，不需要一次給完美的輸入。
+一次完整執行大約涉及 **2 個固定斷點** + **1 個可選人工同步點**（api-enrichment 前可選）。每個斷點都是你可以修正方向的機會，不需要一次給完美的輸入。
 
 ---
 
 ## 事前準備
 
-在啟動 workflow 前，確認以下三項是否就緒：
+在啟動 workflow 前，確認以下項目：
 
 | 項目 | 說明 | 若沒有… |
 |---|---|---|
-| **User Story** | 一段口語描述即可，不需正式格式 | 先用一句話描述「使用者要做什麼」 |
-| **Figma 連結** | 需包含主要流程的畫面，Node ID 最好能對應到元件 | 先提供設計稿，ai-pm 會告訴你缺什麼 |
-| **OpenAPI / Swagger URL** | 可存取的 API 文件網址 | 若無 API，logic-coder 有 mock 模式可替代 |
-
-> **Figma 或 OpenAPI 缺少其中一項**：ai-pm 會輸出 `blocked` 狀態並明確告知缺少什麼，等你補齊後重新提供即可，不會亂推導。
+| **Figma 連結** | 必填，至少包含主要流程頁 | ai-pm 報 blocked 狀態 |
+| **User Story** | 可選，用於增強理解 | ai-pm 仍可基於視覺推導 |
+| **OpenAPI / Swagger URL** | 延後至 Step 3（api-enrichment），非 Step 1 需要 | 用戶可手動提供 JSON schema 或稍後補充 |
 
 ---
 
 ## Step 1：啟動 ai-pm
 
-**你要做的事**：把 User Story、Figma 連結、OpenAPI URL 貼給 Claude。
+**你要做的事**：把 Figma 連結貼給 Claude。如果有 User Story，也可以貼上。
 
 **觸發範例**：
 
@@ -52,22 +52,23 @@
 
 User Story：保戶可以在個人專區查看所有歷史理賠紀錄，包含狀態與金額。
 Figma：https://www.figma.com/file/AbCdEf/insurance-portal?node-id=123:456
-Swagger：https://api.example.com/swagger/v1/swagger.json
 ```
 
 **ai-pm 會做的事**：
 
 1. 解析 Figma 畫面結構（元件、Node ID、互動線索）
-2. 解析 OpenAPI 文件（endpoint、欄位型別、錯誤碼）
-3. 對齊畫面與 API，標記無法確認的部分
-4. 產出 `draft-spec.md`（共 8 個章節）
+2. 如果有 User Story，用其增強理解
+3. 推敲可能的資料結構和 UI 欄位
+4. 產出 `draft-spec.md`（包含元件拆分、互動規格、待補充資料清單）
 5. **暫停，等你 Approve**
+
+> **OpenAPI 不在此步詟**：API 對應和資料確認將由後續 api-enrichment 處理
 
 ---
 
 ## 斷點 A：審閱 draft-spec.md
 
-這是整個 workflow 最重要的人工介入點。你在這裡確認的內容，會直接影響後續兩個 Agent 的產出品質。
+這是整個 workflow 最重要的人工介入點。你在這裡確認的內容，會直接影響後續三個 Agent 的產出品質。
 
 ### 重點審閱四個章節
 
@@ -83,21 +84,34 @@ Swagger：https://api.example.com/swagger/v1/swagger.json
 
 確認所有互動點都有被涵蓋：
 
-- Loading / Empty / Error 三種狀態的 UI 呈現是否完整？
+- 各項互動行為是否完整？
 - 有沒有 Figma 中明確標示但 AI 漏掉的互動？
 - Edge case（例如同時發多個 request、快速切換）是否需要在這裡說明？
 
-**Section 4 — 欄位與資料型別定義**
+**Section 4 — 推測的欄位定義**
 
-這是最容易出錯的地方，務必對照後端 API 文件確認：
+審查 AI 推敲出的資料結構是否合理：
 
-- 欄位命名是 camelCase 還是 snake_case？（AI 會直接照 OpenAPI 格式，但要確認）
-- Enum 值是否與後端一致？（AI 通常會標記 `[Assumption]`）
-- 有沒有前端需要格式化的欄位？（例如日期、金額千分位）
+- UI 上有哪些欄位？名稱怎樣命名比較好？
+- 有沒有遺漏的欄位？
+- 是否有前端需要格式化的欄位？
 
-**Section 8 — Open Questions**
+**Section 5 — 待定數據模型清單**
+
+確認 AI 標記的待補充項目是否清晰：
+
+- API 需要提供哪些 endpoint？
+- 有沒有遺漏需要 API 補充確認的項目？
+
+**Section 6 — Open Questions**
 
 逐一處理 AI 列出的待決策項目。常見問題：
+
+- 狀態值有哪些？（pending/approved/rejected？）
+- 是否需要分頁？預設每頁幾筆？
+- 是否需要篩選 / 排序功能？
+
+決策完成後，回覆「Approve」，spec.md 會進入 vue-layout 次階段。
 
 - 分頁是否需要？每頁幾筆？
 - 某個操作需要二次確認 Modal 嗎？
@@ -217,23 +231,99 @@ ClaimCard 的金額欄位要靠右對齊，請修正後再 Continue。
 StatusBadge 在我們 repo 裡已有同名元件，請改名為 ClaimStatusBadge。
 ```
 
-收到你的 Continue 後，vue3-layout 會輸出交接 payload，你接著啟動 logic-coder。
+收到你的 Continue 後，vue3-layout 會輸出交接 payload。
 
 ---
 
-## Step 3：啟動 logic-coder
+## Step 3：啟動 api-enrichment ⭐️ 新步驟
 
-**你要做的事**：把斷點 B 的 payload 貼給 Claude，或直接說「請繼續實作邏輯」。
+**你要做的事**：提供 OpenAPI 文件或 API schema（如果有的話），或直接說「沒有 API 可以先跳過」。api-enrichment 會補充資料模型、State 結構、Error 處理方案。
+
+**觸發範例**（有 API 的情況）：
+
+```
+Figma 和視覺切版都完成了。以下是我們的 OpenAPI 文件：
+https://api.example.com/swagger/v1/swagger.json
+
+請根據設計稿和 API 補充完整的規格。
+```
+
+**觸發範例**（沒有 API 的情況）：
+
+```
+目前還沒有 API，但 logic-coder 需要資料結構。
+請幫我推敲可能的資料模型，輸出給 logic-coder 確認。
+```
+
+**api-enrichment 會做的事**：
+
+1. 讀取 spec.md 中的「待定數據模型清單」
+2. 如果有 OpenAPI，解析 endpoint、Request/Response schema、錯誤碼
+3. 將 API 與設計稿對齊，生成 API 映射表
+4. 補充 State 結構（loading、error、分頁等）
+5. 補充錯誤處理方案（HTTP 4xx / 5xx 對應的 UI 呈現）
+6. 產出 `enriched-spec.md`（完整規格）
+7. **暫停，輸出總結，等你 Approve**
+
+**若沒有 OpenAPI**：
+
+api-enrichment 會輸出「資料模型候選提案」，請你審閱後確認或修正，然後繼續。
+
+---
+
+## 斷點 B-C（可選）：API 方案確認
+
+api-enrichment 完成後會輸出：
+
+```
+enriched-spec.md 已產生。
+
+🔍 以下是推敲出的 API 映射：
+
+| UI 欄位 | 對應 API 欄位 | 推測解釋 |
+|---|---|---|
+| 理賠標題 | claim_title | claim title from API |
+| 狀態 | claim_status (enum) | pending/approved/rejected |
+| 金額 | claim_amount | in CNY |
+
+是否符合你的預期？若有不同，請修正後回覆「Approve」。
+```
+
+### 你要做的事
+
+1. 檢查 API 映射是否正確
+2. 檢查 State 結構是否合理
+3. 檢查 Error 處理邏輯是否完整
+
+### 如何回覆
+
+**確認沒問題**：
+
+```
+Approve
+```
+
+**需要調整**：
+
+```
+claim_status 的 enum 值應該是 'PENDING', 'APPROVED', 'REJECTED'（大寫），請修正。
+```
+
+---
+
+## Step 4：啟動 logic-coder
+
+**你要做的事**：把斷點 B-C 的 payload 貼給 Claude，或直接說「請繼續實作邏輯」。
 
 **觸發範例**：
 
 ```
-請根據以下 payload 繼續實作 API 邏輯：
+API 方案已確認。請根據 enriched-spec.md 實作容器層、composable、service。
 ```
 
 ```json
 {
-  "spec_path": "spec.md",
+  "spec_path": "enriched-spec.md",
   "component_paths": [
     "src/components/ClaimCard/index.vue",
     "src/components/ClaimRecordsList/index.vue"

@@ -1,21 +1,21 @@
 ---
 name: ai-pm
 description: >
-  AI PM 逆向工程規格產生器。當用戶提到「沒有 Spec」、「PM 沒給規格」、「只有 User Story 跟 Figma」、
-  「從 Figma 推規格」、「看 Swagger 寫規格」、「補規格文件」、「draft-spec」、「開發規格草稿」等情境時，
-  立即啟動此 skill。根據 Figma 畫面結構 + OpenAPI/Swagger schema，逆向推導並產生可交付工程師審閱的
-  `draft-spec.md`，涵蓋 UI 元件清單、元件拆分建議、互動行為說明、State 結構、API 對應表、
-  欄位與資料型別定義、驗證規則與待確認假設（Open Questions）。
-  凡是「無 Spec 開發」、「前端規格不完整」、「需要對齊 API 與畫面」的任務，都應使用此 skill。
+  AI PM 逆向工程規格產生器。當用戶提到「沒有 Spec」、「PM 沒給規格」、「只有 Figma 設計稿」、
+  「從 Figma 推規格」、「API 還沒好先做規格」、「補規格文件」、「draft-spec」、「開發規格草稿」等情境時，
+  立即啟動此 skill。根據 Figma 畫面結構反向推導並產生可交付工程師審閱的 `draft-spec.md`，
+  涵蓋 UI 元件清單、元件拆分建議、互動行為說明、欄位與資料型別定義、待確認假設與開放問題。
+  **Figma 是唯一必填輸入**。若有 User Story 可增強規格理解；API 對應由後續 api-enrichment Skill 處理。
+  凡是「無 Spec 開發」、「只有設計稿沒有 API」、「前端規格不完整」的任務，都應使用此 skill.
 ---
 
 # ai-pm Skill — 逆向工程規格產生器
 
 ## 角色定位
 
-你現在是 **AI PM / 系統分析師 Agent**，是整個 `ai-pm → vue3-layout → logic-coder` workflow 的第一棒。  
-你的任務：在 PM 未提供完整規格的情境下，從 Figma 畫面與 OpenAPI 文件反向推導前端開發規格，  
-產生高品質的 `draft-spec.md`，讓工程師可以直接審閱並交接給下游 Agent。
+你現在是 **AI PM / 系統分析師 Agent**，是整個 `ai-pm → vue3-layout → api-enrichment → logic-coder` workflow 的第一棒。  
+你的任務：在 PM 未提供完整規格的情境下，從 Figma 畫面反向推導前端開發的基礎規格，  
+產生高品質的 `draft-spec.md`，讓工程師可以直接審閱並交接給下游 Agent。（API 對應由後續 api-enrichment 處理）
 
 ---
 
@@ -23,17 +23,17 @@ description: >
 
 ### Step 1：確認輸入材料
 
-開始前先向用戶確認以下三項是否齊備：
+開始前先向用戶確認以下項目：
 
 | 輸入項目 | 說明 | 必要性 |
 |---|---|---|
-| User Story | 口語描述功能目標即可 | ✅ 必要 |
-| Figma 連結 | 至少包含主要流程頁 | ✅ 必要 |
-| Swagger / OpenAPI URL | 可用的 API 文件網址 | ✅ 必要 |
+| Figma 連結 | 至少包含主要流程頁面的完整 URL 或 Node ID | ✅ 必填（唯一強制輸入） |
+| User Story | 口語描述功能目標即可（如「用戶要在首頁查看所有紀錄」） | ⭕ 可選（增強理解但非必需） |
+| Swagger / OpenAPI URL | 後續 api-enrichment Skill 處理，非此階段所需 | ⭕ 不在此步驟需要 |
 
-#### 缺少輸入時 → 輸出 blocked payload，停止執行
+#### 缺少必填輸入時 → 輸出 blocked payload，停止執行
 
-若任何一項缺失，**不得跳過直接推導**，必須輸出以下格式後等待補充：
+若 **Figma 連結缺失**，不得跳過直接推導，必須輸出以下格式後等待補充：
 
 ```
 ⛔ STATUS: blocked
@@ -41,8 +41,7 @@ description: >
 缺少必要輸入，無法繼續產生規格草稿。
 
 缺少項目：
-- [ ] Figma 連結（請提供設計稿 URL）
-- [ ] OpenAPI / Swagger URL（請提供 API 文件網址）
+- [ ] Figma 連結（請提供設計稿 URL 或 Node ID）
 
 補充後請重新觸發，我將從 Step 2 繼續。
 ```
@@ -51,10 +50,12 @@ description: >
 {
   "status": "blocked",
   "reason": "缺少必要輸入",
-  "missing": ["figma_url", "openapi_url"],
+  "missing": ["figma_url"],
   "next_action": "請補充後重新提供"
 }
 ```
+
+若 **User Story 缺失**，仍可繼續執行，僅基於視覺設計推導規格。
 
 ---
 
@@ -72,33 +73,33 @@ description: >
 
 ---
 
-### Step 3：解析 OpenAPI（使用 mcp-openapi）
+### Step 3（可選）：強化人文理解（若有 User Story）
 
-調用 `mcp-openapi` 解析 API 文件，依序提取：
+若用戶提供 User Story，使用其作為規格理解的輔助上下文：
 
-1. **相關 Endpoint 清單** — 篩選與 User Story 功能相關的 API
-2. **Request Payload** — 每個欄位的名稱、型別、是否必填、格式限制
-3. **Response Schema** — 回傳資料結構與欄位型別
-4. **錯誤碼定義** — HTTP status code 與 error message 格式
-5. **API 間的依賴關係** — 例如需先打 A 取 token 才能打 B
+1. **功能目標** — 從 User Story 中提取核心用途
+2. **用戶流程** — 識別主要的用戶操作順序
+3. **潛在輸入 / 輸出** — 推敲可能的表單欄位與列表資料
+
+> ⚠️ **重要**：此步驟不涉及 API 解析。API 映射與資料結構的對齊**另行由 api-enrichment Skill 處理**。
 
 ---
 
-### Step 4：對齊畫面與 API
+### Step 4：標記 UI 所需的待補充數據模型
 
-將 Figma 元件與 API 欄位進行映射：
+根據 Figma 中的 UI 元件（表單、列表、卡片等），推敲可能需要的數據結構，但**不進行 API 映射**：
 
-- 表單欄位 → 對應 Request payload 欄位（含型別）
-- 列表 / 卡片 → 對應 Response schema 欄位
-- 錯誤提示文案 → 對應 API 錯誤碼
-- 無法映射的部分 → 標記為 `[Open Question]`
-- 推測但未確認的對應 → 標記為 `[Assumption]`
+- 表單欄位 → 推測的 Request 欄位名稱與型別（標記為待補充）
+- 列表 / 卡片 → 推測的 Response 欄位名稱與型別（標記為待補充）
+- 狀態 Badge 等 → 推測的 enum 值（如 pending/approved/rejected，標記為 [Assumption]）
 
-同時規劃**元件拆分建議**（這是工程師最在意的項目之一）：
+**同時規劃元件拆分建議**（這是工程師最在意的項目之一）：
 
 - 哪些是可重用的 Base Components（跨頁面共用）
-- 哪些是頁面專屬的 Feature Components
+- 哪些是頁面專屬的 Feature Components  
 - 建議的容器層（Container）與展示層（Presentational）切分點
+
+> **日後流程**：完整的 API 對應表、State 結構、Error 處理方案，由 **api-enrichment Skill** 在後續補充與確認。
 
 ---
 
@@ -114,7 +115,7 @@ description: >
 > 產生時間：{日期}
 > 狀態：Draft — 待工程師審閱
 > Figma：{URL}
-> OpenAPI：{URL}
+> 說明：本規格基於 Figma 設計稿推導。API 對應與資料結構將由後續 api-enrichment Skill 補充。
 
 ---
 
@@ -138,67 +139,40 @@ description: >
 
 | 互動點 | 觸發條件 | 預期行為 | 對應 Figma Frame |
 |---|---|---|---|
-| 點擊「送出」按鈕 | 表單驗證通過 | 呼叫 POST /claims，顯示 loading | Node:xxx |
-| 表單驗證失敗 | 必填欄位為空 | 顯示欄位錯誤提示，不送出 | Node:yyy |
+| 點擊「送出」按鈕 | 表單驗證通過 | 提交表單，顯示 loading | Node:xxx |
+| 表單驗證失敗 | 必填欄位為空 | 顯示欄位錯誤提示，不提交 | Node:yyy |
 
 ---
 
 ## 4. 欄位與資料型別定義  ← 工程師重點審閱
 
-### 4.1 表單欄位（Request）
+### 4.1 推測的表單欄位（待 API 確認）
 
-| 欄位名稱（API） | 顯示名稱（UI） | 型別 | 必填 | 驗證規則 | 錯誤提示 |
-|---|---|---|---|---|---|
-| claim_title | 理賠標題 | string | ✅ | 1–50 字 | 請輸入理賠標題 |
+| UI 位置 | 推測的欄位名稱 | 推測的型別 | 說明 | 待確認項目 |
+|---|---|---|---|---|
+| ... | ... | ... | ... | ... |
 
-### 4.2 列表欄位（Response）
+---
 
-| 欄位名稱（API） | 顯示名稱（UI） | 型別 | 說明 |
+## 5. 待定數據模型清單
+
+以下是根據 Figma 設計稿推敲出需要補充的資料結構。此清單將在 api-enrichment Skill 階段完善。
+
+| UI 元件位置 | 推測的欄位名稱 | 推測的型別 | 備註 |
 |---|---|---|---|
-| claim_status | 狀態 | enum | pending/approved/rejected |
+| ... | ... | ... | 待 API 確認 |
 
 ---
 
-## 5. API 對應表
+## 6. 開放問題與假設  ← 工程師與 api-enrichment 的協商點
 
-| 功能 | Method | Endpoint | Request Payload | Response 關鍵欄位 | 錯誤碼處理 |
-|---|---|---|---|---|---|
-| 取得理賠列表 | GET | /claims | page, pageSize | data[], total | 403: 無權限 |
+### Assumptions（推測，由 Figma 設計稿推導）
 
----
-
-## 6. State 結構草案
-
-### 6.1 頁面 State
-（loading、error、currentPage 等）
-
-### 6.2 表單 State
-（欄位值、驗證狀態、isSubmitting）
-
-### 6.3 衍生 State
-（computed，如 isSubmitDisabled）
-
----
-
-## 7. Loading / Empty / Error 狀態
-
-| 狀態 | 觸發條件 | UI 呈現 | 對應 Figma Node |
-|---|---|---|---|
-| Loading | API 呼叫中 | Skeleton / Spinner | Node:... |
-| Empty | Response 為空陣列 | 「目前沒有紀錄」 | Node:... |
-| Error (4xx) | API 回傳錯誤 | 錯誤提示文字 | Node:... |
-| Error (5xx) | 系統異常 | 通用錯誤訊息 + 重試按鈕 | Node:... |
-
----
-
-## 8. 開放問題與假設  ← 工程師重點審閱
-
-### Assumptions（推測，需確認）
-- [Assumption] claim_status 的 enum 值與 UI 顯示值相同
+- [Assumption] ... 
 
 ### Open Questions（需要人類決策）
-- [Open Question] 列表是否需要分頁？若是，每頁幾筆？
-- [Open Question] 取消理賠操作是否需二次確認 Modal？
+
+- [Open Question] ...
 ```
 
 ---
@@ -243,22 +217,23 @@ description: >
 
 | 規則 | 說明 |
 |---|---|
-| 不捏造 API | 只使用 OpenAPI 文件中確實存在的 endpoint 與欄位 |
-| 標記不確定 | 推測的內容必須加 `[Assumption]`，待決策的加 `[Open Question]` |
-| 欄位命名對齊 | 欄位名稱必須與 OpenAPI 文件一致，不得自行重新命名 |
+| 僅基於 Figma | 不引入任何 OpenAPI 解析；所有推測必須來自視覺設計 |
+| 標記不確定 | 推測的欄位型別必須加 `[Assumption]`，待決策項加 `[Open Question]` |
+| 元件拆分清晰 | 必須明確區分 Base / Feature / Container，每個元件需有 Node ID |
 | Node ID 準確 | Figma Node ID 必須直接從 mcp-figma 回傳值複製，不得手打 |
-| blocked 要輸出 | 缺少輸入時必須輸出 blocked payload，不得跳過推導 |
+| blocked 僅限 Figma | 缺少 Figma 時輸出 blocked；缺少 User Story 不影響流程 |
+| 不編造 API 細節 | 不推導 endpoint、status code、error message 等；標記為待補充 |
 
 ---
 
 ## 完成定義（DoD）
 
-- [ ] `draft-spec.md` 全部 8 個章節結構完整
+- [ ] `draft-spec.md` 全部 6 個章節結構完整（Section 1-4、待定數據模型、Open Questions）
 - [ ] Section 2 有明確的元件拆分建議（Base / Feature / Container）
 - [ ] Section 3 有互動行為表格，含 Figma Frame 對應
-- [ ] Section 4 欄位型別與 API 文件一致，含驗證規則
+- [ ] Section 4 有欄位定義，但**不含 API 對應**或驗證規則（留給 api-enrichment）
+- [ ] Section 5 有待補充數據模型清單，所有推測均標記 [Assumption]
 - [ ] 所有 Figma 元件均有對應 Node ID
-- [ ] 無法確定的資訊均已標記為 Assumption 或 Open Question
 - [ ] 已進入斷點 A 等待工程師 Approve
 
 ---

@@ -1,6 +1,6 @@
 ---
 name: logic-coder
-description: "Vue 3 前端邏輯技能（邏輯 Agent）。將切版完成的純展示元件（Dumb Components）注入狀態管理、API 呼叫、loading/error handling，產出可執行的容器層與 composable。觸發情境包含：接續 vue3-layout 切版後的邏輯實作、「幫我串 API」、「實作資料邏輯」、「加上 loading / error 狀態」、「幫我寫 composable」、「實作 Pinia store」、「沒有 API 但要實作功能」、提到 component_paths handoff payload 的情境。無 API 可串時，會主動產出 mock 資料結構並與使用者確認後繼續實作。"
+description: "Vue 3 前端邏輯技能（邏輯 Agent）。接收 enriched-spec.md（含 API 對應表、State 結構定義、錯誤處理方案），將切版完成的純展示元件（Dumb Components）與 API / 狀態管理邏輯整合，產出可執行的容器層、services、composables。觸發情境包含：接續 api-enrichment 完成後的邏輯實作、「幫我串 API」、「實作資料邏輯」、「加上 loading / error 狀態」、「幫我寫 composable」、「實作 Pinia store」、提到 enriched-spec.md 或 component_paths handoff payload 的情境。"
 ---
 
 # logic-coder Skill（前端邏輯 Agent）
@@ -28,131 +28,128 @@ description: "Vue 3 前端邏輯技能（邏輯 Agent）。將切版完成的純
 
 ### Step 0：確認輸入來源
 
-收集以下資訊，優先從 `vue3-layout` handoff payload 取得：
+收集以下資訊，優先從 `api-enrichment` handoff payload 取得：
 
 ```
-來自 Handoff Payload（斷點 B）：
-- component_paths    → 要注入邏輯的元件清單
+來自 Handoff Payload（斷點 B-C）：
+- component_paths    → 要注入邏輯的元件清單（來自 vue3-layout）
 - figma_node_ids     → 對照設計稿（不修改視覺）
-- spec_version       → 確認 spec.md 版本一致
+- enriched_spec_path → enriched-spec.md 版本（已含 API 對應、State 結構、Error 處理）
 
-額外需要：
-- spec.md            → 互動行為、欄位定義、驗證規則
-- API 資訊           → OpenAPI / Swagger URL 或 schema（可選）
+輸入來源順序：
+1. 優先：api-enrichment 完成後的 enriched-spec.md（含完整 API 定義）
+2. 其次：若無 api-enrichment，使用 spec.md（來自 ai-pm + 工程師 Approve）
+   - 此種情況下，無 API 資訊，將進入 Step 1a（mock 資料協商）
 ```
 
-若無 spec.md 或 API 資訊，進入 **Step 1a（無 API 模式）**。
+若缺少 component_paths 或 spec 文件，輸出 blocked 狀態並停止執行。
 
 ---
 
-### Step 1a：無 API 時的資料結構協商（核心差異點）
+### Step 1：讀取 enriched-spec.md 中的數據結構定義
 
-當使用者沒有提供 API schema 時，**不可直接自行假設資料結構**，需執行以下協商流程：
+從 handoff payload 的 enriched-spec.md（斷點 B-C 已確認的規格）中提取以下資訊：
 
-#### 1. 推導候選資料結構
+#### 1.1 讀取 API 對應表（enriched-spec.md 第 5 章）
 
-根據 Dumb Component 的 props 介面，反推 API 可能的資料格式：
-
-```typescript
-// 例：ClaimCard 的 props
-interface ClaimCardProps {
-  title: string
-  status: 'pending' | 'approved' | 'rejected'
-  amount: number
-  isLoading?: boolean
-}
-
-// 推導出可能的 API Response
-interface ClaimRecord {
-  id: string
-  claimTitle: string          // → title
-  claimStatus: string        // → status（需 mapping）
-  claimAmount: number        // → amount
-  createdAt: string
-  updatedAt: string
-}
-```
-
-#### 2. 輸出資料結構提案（請使用者確認）
-
-```
-⏸ 斷點：資料結構確認
-
-我推導出以下 API Response 結構，請確認或修正：
-
-[ClaimRecord]
-{
-  id: string
-  claimTitle: string      → 對應 props.title
-  claimStatus: string     → 對應 props.status（需 mapping）
-  claimAmount: number     → 對應 props.amount
-  createdAt: string
-}
-
-請確認：
-1. 欄位名稱是否符合後端命名慣例？
-2. status 的實際 enum 值為何？（目前假設原值相同）
-3. 是否有分頁（pagination）需求？
-
-確認後請輸入 OK 或直接修正欄位，我再繼續實作。
-```
-
-#### 3. 確認後，建立 Mock 資料與 Service
+若規格包含 API 資訊，提取：
+- **Endpoint 清單** → URL、HTTP method、parameters
+- **Request / Response Schema** → 欄位名稱、型別、預設值
+- **錯誤碼對應表** → HTTP status → UI 提示訊息
 
 ```typescript
-// src/services/__mock__/claimService.mock.ts
-import type { ClaimRecord } from '../types/claim'
+// 來自 enriched-spec.md 第 5 章「API 對應表」
+// Example：
+export interface ClaimRecord {
+  id: string                              // 對應 props.id
+  claimTitle: string                     // 對應 props.title
+  claimStatus: 'pending' | 'approved' | 'rejected'  // 對應 props.status
+  claimAmount: number                    // 對應 props.amount
+  createdAt: ISO8601DateTime
+}
+```
 
-export const mockClaimRecords: ClaimRecord[] = [
-  {
-    id: 'CLM-001',
-    claimTitle: '醫療理賠申請',
-    claimStatus: 'pending',
-    claimAmount: 15000,
-    createdAt: '2024-01-15T08:00:00Z',
-  },
-  {
-    id: 'CLM-002',
-    claimTitle: '住院補助',
-    claimStatus: 'approved',
-    claimAmount: 30000,
-    createdAt: '2024-01-10T08:00:00Z',
-  },
-]
+#### 1.2 讀取 State 結構設計（enriched-spec.md 第 6 章）
 
-// Mock service（替代真實 API）
-export const fetchClaimRecords = async (): Promise<ClaimRecord[]> => {
+從規格中提取 State type 定義與計算邏輯：
+
+```typescript
+// 來自 enriched-spec.md 第 6 章「State 結構草案」
+export interface PageState {
+  records: ClaimRecord[]
+  currentPage: number
+  pageSize: number
+  totalCount: number
+}
+
+export interface DerivedState {
+  isLoading: boolean
+  hasError: boolean
+  isEmpty: boolean
+  errorMessage: string | null
+}
+```
+
+#### 1.3 讀取數據 Mapping 規則（enriched-spec.md 第 7 章）
+
+提取從 API Response → ViewModel 的轉換函式：
+
+```typescript
+// 來自 enriched-spec.md 第 7 章「數據 Mapping 與轉換規則」
+// 可直接複製使用，無需重新推導
+export function toViewModel(record: ClaimRecord): ClaimCardViewModel {
+  return {
+    id: record.id,
+    title: record.claimTitle,
+    status: mapClaimStatus(record.claimStatus),
+    amount: formatCurrency(record.claimAmount, 'CNY'),
+  }
+}
+```
+
+#### 1.4 讀取錯誤處理方案（enriched-spec.md 第 8 章）
+
+提取 HTTP status / 錯誤碼 → UI state 的對應關係：
+
+```typescript
+// 來自 enriched-spec.md 第 8 章「Loading / Empty / Error 狀態」
+// status code 403 → "您沒有查看此資料的權限"
+// status code 500 → "系統暫時無法使用，請稍後再試"
+```
+
+---
+
+### Step 1b（若無 API）：讀取反向工程的數據模型提案
+
+若 enriched-spec.md 由 data-structure-proposal 流程產出（無 OpenAPI 情況），則：
+- 數據模型已由 api-enrichment 與工程師確認過
+- 無需再次協商，直接使用 enriched-spec.md 中的 TypeScript type 定義
+- 已內含 mock 資料結構，可直接匯入
+
+---
   await new Promise(resolve => setTimeout(resolve, 800)) // 模擬網路延遲
   return mockClaimRecords
-}
+
 ```
 
 ---
-
-### Step 1b：有 API 時的 Schema 解讀
-
-使用 `mcp-openapi` 或直接讀取 Swagger JSON，提取：
-- Endpoint URL 與 HTTP method
-- Request params / body schema
-- Response schema
-- 錯誤碼定義（4xx / 5xx）
 
 ---
 
 ### Step 2：規劃實作架構
 
-確認資料結構後，輸出實作計畫：
+從 enriched-spec.md 確認資料結構與 API 對應後，輸出實作計畫：
 
 ```
 實作計畫：
 
-1. types/         → 新增 ClaimRecord、ApiResponse 型別
-2. services/      → claimService.ts（封裝 API 呼叫）
-3. composables/   → useClaimRecords.ts（管理 loading/error/data）
-4. stores/        → claimStore.ts（若需跨頁共用狀態）
+1. types/         → 新增 ClaimRecord、ApiResponse 型別（從 enriched-spec.md 複製）
+2. services/      → claimService.ts（封裝 API 呼叫，基於 enriched-spec.md 第 5 章）
+3. composables/   → useClaimRecords.ts（管理 loading/error/data，基於 enriched-spec.md 第 6 章狀態定義）
+4. stores/        → claimStore.ts（若需跨頁共用狀態，推薦用 Pinia）
 5. 容器層         → ClaimRecordsContainer.vue（注入邏輯，傳 props 給展示元件）
 
-是否繼續？(Y/n)
+準備好開始實作？(Y/n)
 ```
 
 ---
@@ -372,7 +369,7 @@ function handleCancel(id: string) {
   },
   "mock_mode": true,
   "api_endpoints": [],
-  "spec_version": "spec.md v1.0"
+  "spec_version": "enriched-spec.md v1.0"
 }
 ```
 

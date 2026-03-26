@@ -10,7 +10,7 @@ ai-pm Agent 在產出時應以此為格式對照基準。
 > 產生時間：2024-01-20
 > 狀態：Draft — 待工程師審閱
 > Figma：https://www.figma.com/file/AbCdEf/insurance-portal?node-id=123:456
-> OpenAPI：https://api.example.com/swagger/v1/swagger.json
+> 說明：本規格基於 Figma 設計稿推導。API 對應與資料結構將由後續 api-enrichment Skill 補充。
 
 ---
 
@@ -26,7 +26,9 @@ ai-pm Agent 在產出時應以此為格式對照基準。
 - 理賠詳情頁（本次 spec 只處理列表）
 - 管理後台的理賠審核操作
 
-**主要流程**：進入頁面 → API 取得列表 → 顯示卡片列表 → 點擊「查看詳情」導至詳情頁
+**主要流程**：進入頁面 → 顯示理賠紀錄清單與詳細資訊 → 支援各項互動（點擊詳情、取消申請等）
+
+> 實際的 API 端點、Request/Response 格式與錯誤碼處理將由 api-enrichment Skill 補充。
 
 ---
 
@@ -58,94 +60,62 @@ ai-pm Agent 在產出時應以此為格式對照基準。
 
 ## 4. 欄位與資料型別定義  ← 工程師重點審閱
 
-### 4.1 列表欄位（Response → UI 對應）
+### 4.1 推測的列表欄位（待 API 確認）
 
-| 欄位名稱（API） | 顯示名稱（UI） | 型別 | 說明 | 備註 |
+基於 UI 設計稿推敲的可能欄位。實際欄位名稱、型別、enum 值由 api-enrichment Skill 後續確認。
+
+| UI 位置 | 推測的欄位名稱 | 推測的型別 | 說明 | 待確認項目 |
 |---|---|---|---|---|
-| id | — | string | 理賠紀錄主鍵 | 用於導頁 `/claims/:id` |
-| claim_title | 理賠標題 | string | 顯示於卡片標題 | |
-| claim_status | 狀態 | enum | 顯示於 StatusBadge | [Assumption] enum 值見下方 |
-| claim_amount | 申請金額 | number | 單位：元，顯示時加千分位 | |
-| created_at | 申請日期 | string (ISO 8601) | 格式化為 YYYY/MM/DD | |
+| 卡片標題 | claim_title | string | 理賠申請標題 | [Assumption] 欄位名稱與型別 |
+| 卡片狀態標籤 | claim_status | enum | 狀態顯示（審核中/已核准/已拒絕） | [Assumption] enum 值有哪些？camelCase 還是 snake_case？ |
+| 卡片金額 | claim_amount | number | 申請金額 | [Assumption] 單位？是否需格式化？ |
+| 卡片日期 | created_at | string | 申請日期 | [Assumption] 時間格式？ |
+| 紀錄識別 | id | string | 用於詳情頁導航 | [Assumption] 欄位名稱 |
 
-**claim_status enum 對應**：
+> 📝  後續流程：api-enrichment Skill 將補充完整的 API Response Schema、欄位驗證規則、錯誤碼定義。
 
-| API 值 | UI 顯示文字 | Badge 顏色 |
+---
+
+## 5. 待定數據模型清單 ← api-enrichment 將完善此區段
+
+以下是根據 Figma 設計稿推敲出需要補充的資料結構與 API 對應。此清單將在 api-enrichment Skill 階段完善。
+
+### 5.1 主列表 API 推測
+
+| 推測項目 | UI 呈現 | 待補充內容 |
 |---|---|---|
-| pending | 審核中 | 黃色 |
-| approved | 已核准 | 綠色 |
-| rejected | 已拒絕 | 紅色 |
+| **列表查詢 API** | 進入頁面時自動加載理賠清單 | Endpoint / HTTP Method / Request params / Response schema |
+| **分頁處理** | Figma 未明確顯示分頁 UI | 是否需要分頁？每頁幾筆？是否有 page/pageSize 參數？ |
+| **狀態過濾** | StatusBadge 顯示多個狀態 | 狀態值為何？是否需前端過濾或 API 篩選？ |
+| **錯誤提示** | Section 3 提及「載入失敗」 | HTTP 4xx / 5xx 的處理方案？是否有通用 error 物件格式？ |
 
-> [Assumption] 以上 enum 值推測與 API 一致，需後端確認。
+### 5.2 操作 API 推測（可選）
 
----
+| 推測項目 | UI 互動 | 待補充內容 |
+|---|---|---|
+| **取消申請** | 點擊「取消申請」按鈕 | 該操作對應的 API？哪些狀態允許取消？ |
+| **查看詳情** | 點擊卡片導頁 | 詳情頁的 API 端點？（另行 spec，非本頁範圍） |
 
-## 5. API 對應表
-
-| 功能 | Method | Endpoint | Request Params | Response 關鍵欄位 | 錯誤碼處理 |
-|---|---|---|---|---|---|
-| 取得理賠列表 | GET | /v1/claims | page (int), page_size (int) | data: ClaimRecord[], total: int | 401: 重新登入 / 403: 無權限提示 / 5xx: 通用錯誤 |
-| 取消理賠申請 | DELETE | /v1/claims/:id | — | — | 400: 狀態不允許取消 / 404: 找不到紀錄 |
-
----
-
-## 6. State 結構草案
-
-### 6.1 頁面 State
-
-```typescript
-interface ClaimListPageState {
-  isLoading: boolean      // API 呼叫中
-  error: string | null    // 錯誤訊息
-  currentPage: number     // 當前分頁（預設 1）
-  pageSize: number        // 每頁筆數（預設 20）
-  total: number           // 總筆數（來自 API）
-}
-```
-
-### 6.2 列表資料 State
-
-```typescript
-interface ClaimListDataState {
-  records: ClaimRecord[]  // 當前頁的理賠紀錄
-}
-```
-
-### 6.3 衍生 State
-
-```typescript
-// 是否顯示空狀態
-const isEmpty = computed(() => !isLoading.value && records.value.length === 0)
-
-// 總頁數
-const totalPages = computed(() => Math.ceil(total.value / pageSize.value))
-```
+> 實際的 API 對應與資料驗證規則，請參考後續補充的 `enriched-spec.md`。
 
 ---
 
-## 7. Loading / Empty / Error 狀態
+## 6. 開放問題與假設  ← 工程師與 api-enrichment 的協商點
 
-| 狀態 | 觸發條件 | UI 呈現 | 對應 Figma Node |
-|---|---|---|---|
-| Loading | API 呼叫中（isLoading: true） | Skeleton 卡片列表（3 筆） | 123:540 |
-| Empty | Response data 為空陣列 | EmptyState：「目前沒有理賠紀錄」 | 123:530 |
-| Error (401) | 未登入或 token 過期 | 重新導向登入頁（不顯示在列表頁） | — |
-| Error (403) | 無查看權限 | 「您沒有查看此資料的權限」提示 | 123:520 |
-| Error (5xx) | 系統異常 | 「系統暫時無法使用，請稍後再試」+ 重試按鈕 | 123:520 |
+### Assumptions（推測，由 Figma 設計稿推導）
 
----
-
-## 8. 開放問題與假設  ← 工程師重點審閱
-
-### Assumptions（推測，需確認）
-
-- [Assumption] `claim_status` 的 enum 值（pending/approved/rejected）與 API 文件一致
-- [Assumption] 金額單位為新台幣元，無需幣別轉換
-- [Assumption] `created_at` 為 ISO 8601 格式字串
+- [Assumption] 列表包含至少 5 筆理賠紀錄展示（Figma 樣本數）
+- [Assumption] StatusBadge 使用顏色區分狀態（黃/綠/紅 對應的狀態值需確認）
+- [Assumption] 金額欄位需顯示千分位格式
+- [Assumption] 日期欄位需格式化顯示（YYYY/MM/DD）
 
 ### Open Questions（需要人類決策）
 
-- [Open Question] 列表是否需要分頁控制（Pagination）？若是，預設每頁幾筆？
-- [Open Question] 「取消申請」操作是否需要二次確認 Modal？還是直接呼叫 API？
-- [Open Question] Figma 中 Node 123:510「取消按鈕」只在 `pending` 狀態顯示，這個判斷由前端控制還是 API 回傳？
-- [Open Question] 是否需要支援篩選（依狀態）或排序功能？Figma 中未見相關 UI。
+- [Open Question] 列表是否需要分頁控制？若是，預設每頁幾筆？
+- [Open Question] StatusBadge 的狀態值為何？（pending/approved/rejected？還是其他？）
+- [Open Question] 「取消申請」操作是否需要二次確認 Modal？
+- [Open Question] 是否需要支援依狀態篩選或排序功能？Figma 中未見 UI 線索。
+- [Open Question] API 錯誤時的 UI 提示文案需確認嗎？
+
+> 💡 **提示**：以上 Open Questions 將由工程師在斷點 A 審閱時補充決策，
+> 後續 api-enrichment Skill 會根據決策結果補充 API 對應與驗證規則。

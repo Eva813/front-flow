@@ -1,13 +1,19 @@
 ---
 name: vue-layout
-description: "Vue 3 + SCSS 切版技能（切版 Agent）。當使用者提供 Figma 連結或設計稿 spec，需要產出 Vue 3 純展示元件（Dumb Components）時使用。觸發情境包含：「幫我切版」、「根據 Figma 產出元件」、「根據 spec 建立 UI」、「幫我建 Vue 元件」、「切這個畫面」、有提到 Figma URL 或 Node ID 加上 Vue/元件/切版等字詞。僅產出 props/emits 介面的純 UI 結構，不含 API 呼叫或業務邏輯。"
+description: "Vue 3 + SCSS 切版技能（切版 Agent）— 像素級精確實現。從 Figma 設計稿生成 **1:1 視覺保真的** Vue 3 純展示元件（Dumb Components）。觸發情境包含：「幫我切版」、「根據 Figma 產出元件」、「根據 spec 建立 UI」、「幫我建 Vue 元件」、「切這個畫面」、「實現 Figma 設計」、「補切版」、有提到 Figma URL 或 Node ID 加上 Vue/元件/切版等字詞。保證顏色、間距、字號、圓角、邊框等像素級精確匹配，同時支援與規格流程集成（使用 spec.md 增強理解）或無規格快速實現。僅產出 props/emits 介面的純 UI 結構，不含 API 呼叫或業務邏輯。"
 ---
 
 # vue-layout Skill（切版 Agent）
 
 ## 1) 目標
 
-根據 `spec.md` 與 Figma 設計稿，建立 Vue 3 + SCSS 的純展示元件，輸出可被上層容器直接串接的 UI 結構。
+從 Figma 設計稿生成 **1:1 像素級精確保真** 的 Vue 3 + SCSS 純展示元件，確保視覺效果與 Figma 完全一致。
+
+支援兩種工作流程：
+- **有規格路徑**：結合 `spec.md`（來自 ai-pm），獲得功能理解增強
+- **快速實現路徑**：直接從 Figma 推導，無需等待規格審稿
+
+最終輸出可被上層容器直接串接的 UI 結構與 Handoff Payload。
 
 ---
 
@@ -33,17 +39,19 @@ description: "Vue 3 + SCSS 切版技能（切版 Agent）。當使用者提供 F
 
 ---
 
-### Step 2：解讀 Figma 設計稿
+### Step 2：解讀 Figma 設計稿 & 視覺精度提取
 
-使用 MCP 工具讀取 Figma 節點，提取以下資訊：
+使用 Framelink MCP 讀取 Figma 節點，**精確提取所有視覺屬性**：
 
-| 類型 | 說明 |
-|------|------|
-| 版面結構 | 父子節點關係、Auto Layout 方向與間距 |
-| 色彩 | Fill、Stroke、背景色（轉為 CSS 變數或 SCSS 變數）|
-| 字級 | Font size、weight、line-height |
-| 間距 | Padding、Margin、Gap |
-| 互動點 | Button、Input、Select、Tab 等可互動元素 |
+| 類型 | 說明 | 保真標準 |
+|------|------|----------|
+| 版面結構 | 父子節點關係、Auto Layout 方向與間距 | 精確到 px |
+| 色彩 | Fill、Stroke、背景色（RGB / HSL 精確值） | 16 進位完整匹配 |
+| 字級 | Font size、weight、line-height、letter-spacing | 完全匹配設計稿 |
+| 間距 | Padding、Margin、Gap（每個方向獨立記錄） | 精確到 px |
+| 邊框 | Border width、style、color、radius | 精確到 px |
+| 陰影 | Box-shadow（offset、blur、spread、color） | 完全複製 |
+| 互動點 | Button、Input、Select、Tab、Hover 狀態 | 視覺變化可追溯 |
 
 輸出 Figma 解讀摘要給使用者確認：
 
@@ -124,36 +132,84 @@ const emit = defineEmits<ClaimCardEmits>()
 </script>
 ```
 
-#### 4.3 SCSS 樣式（Mobile First）
+#### 4.3 SCSS 樣式 — 像素精確實現（Mobile First）
 
 ```vue
 <style lang="scss" scoped>
 .claim-card {
   display: flex;
   flex-direction: column;
-  padding: 16px;
+  padding: 16px;  /* 精確匹配 Figma 設計稿 */
 
   &__header {
-    font-size: 16px;
-    font-weight: 600;
+    font-size: 16px;           /* 完全複製 Figma 字號 */
+    font-weight: 600;          /* 精確匹配字重 */
+    line-height: 1.5;          /* Figma 行高值 */
+    letter-spacing: 0px;       /* Figma 字距 */
   }
 
   @media (min-width: 768px) {
-    padding: 24px;
+    padding: 24px;             /* 平板斷點精確值 */
   }
 
   @media (min-width: 1280px) {
-    flex-direction: row;
+    flex-direction: row;       /* Figma constraints 定義 */
   }
 }
 </style>
 ```
 
+**關鍵原則**：
+- ✅ 每個 CSS 值都對應 Figma 中的實際測量
+- ✅ 使用 SCSS 變數或 CSS 自訂屬性，但值必須精確
+- ✅ 避免四捨五入，保留 px（除非 Figma 明確使用 em/rem）
+
 ---
 
-### Step 5：斷點 B — 視覺預覽與交接
+### Step 5：視覺驗證 — 1:1 保真檢查
 
-完成切版後輸出：
+**在交接前，必須驗證實現的組件與 Figma 完全一致。**
+
+#### 5.1 取得視覺基準（Figma 截圖）
+
+使用 Framelink MCP 取得 Figma 節點的截圖作為視覺基準：
+```
+mcp_framelink_mcp_get_figma_data(fileKey=":fileKey", nodeId=":nodeId")
+```
+
+此截圖作為**真理來源**，用於側邊對比檢驗。
+
+#### 5.2 視覺驗證檢查清單
+
+逐項檢驗，對照 Figma 截圖：
+
+- [ ] **版面**：Flex 方向、對齐、寬高比 — 精確匹配
+- [ ] **間距**：Padding、Margin、Gap — 每個值都精確到 px
+- [ ] **文字**：字號、字重、行高、字色 — 完全複製
+- [ ] **邊框 & 圓角**：顏色、寬度、半徑 — 精確到 px
+- [ ] **色彩**：背景色、邊框色、文字色 — 16 進位精確匹配
+- [ ] **陰影**：Box-shadow — offset、blur、spread、color 完全複製
+- [ ] **互動狀態**：Hover、Active、Disabled — 視覺變化可對應 Figma
+- [ ] **響應式**：所有斷點行為 — 符合 Figma constraints
+- [ ] **資源**：圖片、icon — 清晰顯示，無占位符
+
+#### 5.3 不匹配時的處理
+
+如發現不匹配：
+1. **檢查 CSS**：確認值是否有誤（常見：單位錯誤、計算誤差）
+2. **向上取整/下取整**：若 Figma 值為浮點，評估是否應 round 至整數
+3. **設計系統 vs Figma**：若項目設計令牌與 Figma 不同，優先調整 Figma 側（或文檔記述原因）
+4. **瀏覽器差異**：確認跨瀏覽器渲染一致
+
+#### 5.4 完成通過
+
+當所有項目通過檢驗後，進入 **Step 6：交接**。
+
+---
+
+### Step 6（续）：交接產物
+
+完成驗證後輸出：
 
 ```
 元件切版完成，請查看本地預覽。
@@ -179,23 +235,32 @@ const emit = defineEmits<ClaimCardEmits>()
 
 ---
 
-## 4) MCP 工具使用指南
+## 4) MCP 工具指南
 
-### Framelink MCP for Figma
+### 唯一支援工具：Framelink MCP for Figma
 
-從 Figma URL 解析 fileId：
+此 skill 僅使用 **Framelink MCP** 與 Figma 互動。
+
+#### 從 Figma URL 解析標識符
+
 ```
-https://www.figma.com/file/{fileId}/...?node-id={nodeId}
+https://figma.com/design/{fileKey}/{fileName}?node-id={nodeId}
 ```
 
-常用操作：
-- `get_node(fileId, nodeId)` — 取得節點結構與樣式
-- `get_styles(fileId)` — 取得全域樣式變數
-- `get_components(fileId)` — 取得元件列表
+- **fileKey**：`/design/` 後的字串（例：`kL9xQn2VwM8pYrTb4ZcHjF`）
+- **nodeId**：URL 中 `node-id` 參數的值（例：`42-15`）
 
-### mcp-fs
+#### 常用操作
 
-建立與修改元件檔案時使用。
+| 操作 | 用途 | 何時使用 |
+|------|------|----------|
+| `mcp_framelink_mcp_get_figma_data(fileKey, nodeId)` | 取得節點完整結構、樣式、設計令牌 | Step 2：解讀設計稿 |
+| 截圖取得 | 下載 Figma 視覺基準 | Step 5：視覺驗證前 |
+| `mcp_framelink_mcp_download_figma_images()` | 下載 Figma 中的資源（圖片、SVG） | Step 4：需要資源時 |
+
+#### mcp-fs 輔助工具
+
+- 建立與修改組件檔案時使用
 
 ---
 
@@ -213,12 +278,31 @@ https://www.figma.com/file/{fileId}/...?node-id={nodeId}
 
 ## 6) 完成定義（DoD）
 
-- UI 與 Figma 結構/視覺一致（允許合理工程化微調）
-- 所有互動點都有對應 props 或 emits
-- 無 API 呼叫與業務邏輯混入
-- SCSS 採 Mobile First 撰寫
-- 巢狀不超過 4 層
-- 輸出 Handoff Payload 供下游 Agent 使用
+### ✅ 視覺保真檢查（必須通過）
+
+- [ ] **版面精確**：Flex 方向、對齐、寬高比 — 與 Figma 截圖完全一致
+- [ ] **間距精確**：Padding、Margin、Gap — 精確到 px
+- [ ] **文字精確**：字號、字重、行高、letter-spacing — 完全複製
+- [ ] **邊框 & 圓角精確**：寬度、半徑、顏色 — 精確到 px
+- [ ] **色彩精確**：RGB / 16 進位 — 完全匹配 Figma（可透過設計令牌）
+- [ ] **陰影精確**：offset、blur、spread、color — 完全複製
+- [ ] **互動狀態一致**：Hover、Active、Disabled 的視覺變化可追溯
+- [ ] **響應式正確**：所有斷點行為符合 Figma constraints
+- [ ] **資源完整**：圖片、icon、SVG 正確顯示，無占位符
+
+### ✅ 代碼品質檢查
+
+- [ ] 所有互動點都有對應 props 或 emits
+- [ ] 無 API 呼叫與業務邏輯混入
+- [ ] SCSS 採 Mobile First 撰寫
+- [ ] 巢狀不超過 4 層
+- [ ] TypeScript 型別定義完整
+
+### ✅ 交接清單
+
+- [ ] 本地預覽視覺驗證通過
+- [ ] 輸出 Handoff Payload 供下游 Agent（api-enrichment / logic-coder）使用
+- [ ] 組件檔案與 types.ts 已提交
 
 ---
 
