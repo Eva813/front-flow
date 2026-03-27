@@ -4,9 +4,9 @@ description: >
   AI PM 逆向工程規格產生器。當用戶提到「沒有 Spec」、「PM 沒給規格」、「只有 Figma 設計稿」、
   「從 Figma 推規格」、「API 還沒好先做規格」、「補規格文件」、「draft-spec」、「開發規格草稿」等情境時，
   立即啟動此 skill。根據 Figma 畫面結構反向推導並產生可交付工程師審閱的 `draft-spec.md`，
-  涵蓋 UI 元件清單、元件拆分建議、互動行為說明、欄位與資料型別定義、待確認假設與開放問題。
+  涵蓋頁面結構順序、Node Coverage Ledger、UI 元件清單、元件拆分建議、互動行為說明、欄位與資料型別定義、待確認假設與開放問題。
   **Figma 是唯一必填輸入**。若有 User Story 可增強規格理解；API 對應由後續 api-enrichment Skill 處理。
-  凡是「無 Spec 開發」、「只有設計稿沒有 API」、「前端規格不完整」的任務，都應使用此 skill.
+  凡是「無 Spec 開發」、「只有設計稿沒有 API」、「前端規格不完整」的任務，都應使用此 skill。只要畫面來自 Figma，就必須在 spec 階段先列出已確認 node、未覆蓋 node 與不可忽略的視覺骨架節點，不能只給高層元件摘要。
 ---
 
 # ai-pm Skill — 逆向工程規格產生器
@@ -64,12 +64,21 @@ description: >
 調用 `mcp-figma` 解析畫面，依序提取：
 
 1. **頁面與 Frame 清單** — 確認流程範圍
-2. **主要 UI 元件** — Node ID、名稱、類型（按鈕/表單/列表等）
-3. **文案與 Label** — 表單欄位名稱、按鈕文字、提示訊息
-4. **互動線索** — Hover 狀態、按鈕連接的 Frame、Loading / Empty / Error 狀態畫面
-5. **視覺層級** — 共用元件 vs 頁面專屬元件（影響後續拆分建議）
+2. **頁面結構順序** — 至少列出主頁一級節點與關鍵二級節點，確認實際顯示順序
+3. **主要 UI 元件** — Node ID、名稱、類型（按鈕/表單/列表等）
+4. **文案與 Label** — 表單欄位名稱、按鈕文字、提示訊息
+5. **互動線索** — Hover 狀態、按鈕連接的 Frame、Loading / Empty / Error 狀態畫面
+6. **視覺層級** — 共用元件 vs 頁面專屬元件（影響後續拆分建議）
+7. **視覺骨架節點** — 背景底板、分隔線、非語意但影響版面的 card、placeholder、icon/image 節點
+
+解析完成後，必須建立 **Node Coverage Ledger**，至少包含以下欄位：
+
+| Node ID | 名稱 | 層級 | 類型 | 狀態 | 備註 |
+|---|---|---|---|---|---|
+| ... | ... | 一級 / 關鍵二級 | 結構 / 元件 / 資源 / 骨架 | 已確認 / 待確認 / 不在本次範圍 | ... |
 
 > ⚠️ 只記錄 Figma 中**明確可見**的資訊，不得憑空假設設計意圖。
+> ⚠️ 不可忽略「看起來不像元件」但實際影響視覺結構的節點，例如背景 card、分隔線、placeholder、圖示資源。
 
 ---
 
@@ -99,6 +108,8 @@ description: >
 - 哪些是頁面專屬的 Feature Components  
 - 建議的容器層（Container）與展示層（Presentational）切分點
 
+若畫面有列表、表格、樹狀資料或群組 row，必須列出**完整可見 row inventory**，不可只摘錄代表性幾筆。
+
 > **日後流程**：完整的 API 對應表、State 結構、Error 處理方案，由 **api-enrichment Skill** 在後續補充與確認。
 
 ---
@@ -122,6 +133,18 @@ description: >
 ## 1. 功能範圍與流程摘要
 
 （描述此功能做什麼、涵蓋哪些頁面/流程、明確排除哪些範疇）
+
+### 1.1 頁面結構順序
+
+| 顯示順序 | 元件 / 區塊名稱 | Figma Node ID | 備註 |
+|---|---|---|---|
+| 1 | ... | ... | ... |
+
+### 1.2 Node Coverage Ledger
+
+| Node ID | 名稱 | 層級 | 類型 | 狀態 | 備註 |
+|---|---|---|---|---|---|
+| ... | ... | 一級 / 關鍵二級 | 結構 / 元件 / 資源 / 骨架 | 已確認 / 待確認 / 不在本次範圍 | ... |
 
 ---
 
@@ -202,10 +225,14 @@ description: >
 
 ```json
 {
-  "spec_path": "spec.md",
+  "spec_path": "draft-spec.md",
   "figma_node_ids": ["<已確認的 Node ID 清單>"],
+  "approved_node_ids": ["<本次批准切版的 Node ID 清單>"],
+  "covered_node_ids": ["<spec 已明確覆蓋的 Node ID 清單>"],
+  "uncovered_node_ids": ["<尚未覆蓋或待確認的 Node ID 清單>"],
   "scope_notes": "<人工增刪改備註>",
   "open_questions_resolved": "<已解決的 Open Questions 摘要>",
+  "layout_order_verified": true,
   "approved_by": "human",
   "status": "approved"
 }
@@ -221,6 +248,9 @@ description: >
 | 標記不確定 | 推測的欄位型別必須加 `[Assumption]`，待決策項加 `[Open Question]` |
 | 元件拆分清晰 | 必須明確區分 Base / Feature / Container，每個元件需有 Node ID |
 | Node ID 準確 | Figma Node ID 必須直接從 mcp-figma 回傳值複製，不得手打 |
+| 結構順序明確 | 必須列出頁面一級節點與關鍵二級節點的實際顯示順序 |
+| 不忽略骨架節點 | 背景 card、分隔線、placeholder、icon/image 等節點必須被標記為已確認或不在本次範圍 |
+| Coverage 可追蹤 | 必須產出 Node Coverage Ledger，讓下游 Agent 知道哪些 node 已批准、哪些仍未覆蓋 |
 | blocked 僅限 Figma | 缺少 Figma 時輸出 blocked；缺少 User Story 不影響流程 |
 | 不編造 API 細節 | 不推導 endpoint、status code、error message 等；標記為待補充 |
 
@@ -229,11 +259,14 @@ description: >
 ## 完成定義（DoD）
 
 - [ ] `draft-spec.md` 全部 6 個章節結構完整（Section 1-4、待定數據模型、Open Questions）
+- [ ] Section 1 含頁面結構順序與 Node Coverage Ledger
 - [ ] Section 2 有明確的元件拆分建議（Base / Feature / Container）
 - [ ] Section 3 有互動行為表格，含 Figma Frame 對應
 - [ ] Section 4 有欄位定義，但**不含 API 對應**或驗證規則（留給 api-enrichment）
 - [ ] Section 5 有待補充數據模型清單，所有推測均標記 [Assumption]
-- [ ] 所有 Figma 元件均有對應 Node ID
+- [ ] 所有已確認的 Figma 元件、視覺骨架節點與資源節點均有對應 Node ID 或狀態標記
+- [ ] 表格 / 列表型畫面已列出完整可見 row inventory，而非代表性摘錄
+- [ ] Approve 後的 handoff payload 含 `spec_path`、`approved_node_ids`、`covered_node_ids`、`uncovered_node_ids`
 - [ ] 已進入斷點 A 等待工程師 Approve
 
 ---

@@ -1,13 +1,7 @@
 <script setup lang="ts">
-
+import AgentAnalysisPage from './pages/AgentAnalysisPage.vue'
 </script>
 
 <template>
-  <div>
-    123
-  </div>
+  <AgentAnalysisPage />
 </template>
-
-<style lang="scss" scoped>
-// Global styles are in style.css
-</style>
