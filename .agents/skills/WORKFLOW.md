@@ -202,7 +202,20 @@ vue3-layout 完成後會輸出：
 ### 你要做的事
 
 1. 執行建議的預覽指令
-2. 對照 Figma 確認以下項目：
+2. **（建議）執行視覺比對審查**：在預覽頁面確認可開啟後，執行 `/figma-visual-reviewer:review` 進行 Figma vs 實際畫面的像素比對：
+
+   ```
+   /figma-visual-reviewer:review http://localhost:5173
+   ```
+
+   Visual Reviewer 會產出 HTML 報告，將差異分類為：
+   - 🔴 Bug — 必須修正後再 Continue
+   - 🟡 Drift — 需評估後決定是否修正
+   - 🟢 Acceptable — 忽略（瀏覽器渲染差異）
+
+   > 若尚未設定 `FIGMA_ACCESS_TOKEN`，reviewer 會改為詢問 Figma 截圖路徑或引導你用 Playwright 截圖。
+
+3. 對照 Figma 確認以下項目：
 
 | 確認項目 | 說明 |
 |---|---|

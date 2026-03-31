@@ -1,35 +1,27 @@
 <script setup lang="ts">
-// Figma: 9714:25868 | TabGroup | row, gap:12px, hug
+import type { TabGroupProps, TabGroupEmits } from './types'
 import TabItem from './TabItem.vue'
-import type { TabDef } from '../../types'
 
-const props = defineProps<{
-  tabs: TabDef[]
-  activeTab: string
-}>()
-
-const emit = defineEmits<{
-  (e: 'tab-change', key: string): void
-}>()
+const props = defineProps<TabGroupProps>()
+const emit = defineEmits<TabGroupEmits>()
 </script>
 
 <template>
-  <!-- Figma: layout_TFJH4F | row, align-center, gap:12px, hug -->
-  <div class="tab-group" role="tablist">
+  <nav class="tab-group">
     <TabItem
-      v-for="tab in tabs"
-      :key="tab.key"
-      :tab="tab"
-      :isActive="tab.key === activeTab"
-      @click="emit('tab-change', $event)"
+      v-for="(tab, index) in props.tabs"
+      :key="index"
+      :label="tab.label"
+      :is-active="index === props.modelValue"
+      :has-alert="tab.hasAlert"
+      @click="emit('update:modelValue', index)"
     />
-  </div>
+  </nav>
 </template>
 
 <style lang="scss" scoped>
 .tab-group {
   display: flex;
-  flex-direction: row;
   align-items: center;
   gap: 12px;
 }
