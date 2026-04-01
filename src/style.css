@@ -5,16 +5,3 @@
 *, *::before, *::after {
   box-sizing: border-box;
 }
-
-html, body, #app {
-  height: 100%;
-  margin: 0;
-  padding: 0;
-}
-body {
-  font-family: 'Noto Sans TC', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  background: #e1f0fa;
-  color: #172122;
-}

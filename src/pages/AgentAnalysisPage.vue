@@ -1,235 +1,279 @@
 <script setup lang="ts">
-// Figma: 9714:25867 | AgentAnalysisPage | 1440×1698, bg:#E1F0FA
-// Container: manages tab state, provides mock data (logic-coder will wire API later)
-import { ref } from 'vue'
-import AppHeader from '../components/AppHeader/index.vue'
-import BasicInfoSection from '../components/BasicInfoSection/index.vue'
-import SummaryAlertCard from '../components/SummaryAlertCard/index.vue'
-import TabGroup from '../components/TabGroup/index.vue'
-import ComprehensiveAnalysisTab from '../components/ComprehensiveAnalysisTab/index.vue'
-import PlaceholderTab from '../components/PlaceholderTab/index.vue'
 import type {
-  AgentInfo,
-  TabDef,
-  MetricData,
-  InsuranceGroup,
-  ScopeDescription,
-} from '../types'
+  WarningBannerProps,
+  AgentBasicInfoCardProps,
+  SummaryAlertProps,
+  TabGroupProps,
+  DateRangeSelectProps,
+  ScopeDescriptionProps,
+  MetricCardProps,
+  InsuranceTableProps,
+} from '@/components/types'
 
-// ── Mock data (from draft-spec.md Row Inventory + field definitions) ────────
+import AppHeader from '@/components/AppHeader.vue'
+import WarningBanner from '@/components/WarningBanner.vue'
+import AgentBasicInfoCard from '@/components/AgentBasicInfoCard.vue'
+import SummaryAlert from '@/components/SummaryAlert.vue'
+import TabGroup from '@/components/TabGroup.vue'
+import DateRangeSelect from '@/components/DateRangeSelect.vue'
+import ScopeDescription from '@/components/ScopeDescription.vue'
+import MetricCard from '@/components/MetricCard.vue'
+import InsuranceTable from '@/components/InsuranceTable.vue'
+import { ref } from 'vue'
 
-const agentInfo: AgentInfo = {
-  agentName: '— (待 API)',
-  agencyName: '— (待 API)',
-  managerInfo: '940171 張巧勳',
-  registeredYear: 2018,
-  recentOrderCount: 10,
-  status: 'On',
-  lastUpdatedAt: '2026 年 2 月',
+// ===== Mock Data =====
+
+const warningData: WarningBannerProps = {
+  warningText: '不可外流',
+  warningDescription: '本分析資料僅供內部使用，請同仁遵守公司資料保密及安全防範管理辦法。',
+  lastUpdateTime: '最後更新時間：2026 年 2 月',
 }
 
-const tabs: TabDef[] = [
-  { key: 'comprehensive', label: '綜合分析', showAlert: false },
-  { key: 'car',           label: '任意車險', showAlert: true },
-  { key: 'personal',     label: '個傷',     showAlert: true },
-]
-
-const activeTab = ref('comprehensive')
-
-const metrics: MetricData[] = [
-  {
-    mainLabel: '總保費 (元)',
-    mainValue: 1742766,
-    subLabel: '簽單損率',
-    subCount: 187,      // 理賠件數 (confirmed Q4)
-    percentage: '142.9%',
+const basicInfoData: AgentBasicInfoCardProps = {
+  name: {
+    agentName: '徐*雯',
+    agentNo: 'E**C738183',
+    companyName: '威*保經',
+    companyNo: 'BA1296****',
+    managerInfo: '管理人：940171  張巧勳',
   },
-  {
-    mainLabel: '總理賠金額 (元)',
-    mainValue: 1389222,
-    subLabel: '簽單損率',
-    subCount: 187,
-    percentage: '142.9%',
+  status: {
+    registrationYear: 2018,
+    recentPoliciesCount: 10,
+    status: 'on',
   },
-]
+}
 
-const scope: ScopeDescription = {
+const summaryData: SummaryAlertProps = {
+  complaintsText: '客戶提出的官方申訴：共 3 筆  (近三個月： 1 筆)',
+  specialNotes: [
+    {
+      text: '特殊註記：A&H 個傷 - 通路業務員招攬品質不良',
+      date: '2019/06/06',
+    },
+  ],
+}
+
+const tabData = ref<TabGroupProps>({
+  tabs: [
+    { text: '綜合分析', state: 'active' },
+    { text: '任意車險', state: 'inactive-alert' },
+    { text: '個傷', state: 'inactive-alert' },
+  ],
+  activeIndex: 0,
+})
+
+const dateRangeData = ref<DateRangeSelectProps>({
+  options: [
+    { label: '近六年', startDate: '2019/03/01', endDate: '2025/02/28' },
+    { label: '近五年', startDate: '2020/03/01', endDate: '2025/02/28' },
+    { label: '近三年', startDate: '2022/03/01', endDate: '2025/02/28' },
+  ],
+  selectedIndex: 0,
+})
+
+const scopeData: ScopeDescriptionProps = {
   title: '分析範圍說明：',
-  mainText1: '目前已納入分析的險別包括：任意車險、A&H',
-  excludeText: '(不包含疫苗險、團險、旅平險)',
-  mainText2: '、住火、商火、工程險、公共意外、雇主責任、產品責任、營繕承包人意外。',
+  descriptions: ['目前已納入分析的險別包括：任意車險、A&H'],
+  exclusions: '(不包含疫苗險、團險、旅平險)',
 }
 
-// Row Inventory (draft-spec.md Section 4.6)
-const groups: InsuranceGroup[] = [
-  {
-    groupName: '任意車險',
-    hasAlert: true,
-    premium: 1114665,
-    claimAmount: 1165918,
-    lossRatio: '105.0%',
-    policyCount: 101,
-    customerCount: 41,
-    claimCount: 17,
-    claimRate: '22.0%',
-    // No items → standalone parent with bottom divider
-  },
-  {
-    groupName: 'A&H',
-    hasAlert: false,
-    premium: 577560,
-    claimAmount: 199924,
-    lossRatio: '34.6%',
-    policyCount: 180,
-    customerCount: 43,
-    claimCount: 9,
-    claimRate: '20.9%',
-    items: [
-      {
-        name: '個傷',
-        hasAlert: true,
-        premium: 576258,
-        claimAmount: 199924,
-        lossRatio: '34.7%',
-        policyCount: 174,
-        customerCount: 42,
-        claimCount: 9,
-        claimRate: '21.4%',
-        isLastInGroup: false,
-      },
-      {
-        name: '個健',
-        hasAlert: false,
-        premium: 1302,   // corrected from 1.302 (confirmed Q5)
-        claimAmount: 0,
-        lossRatio: '0%',
-        policyCount: 6,
-        customerCount: 1,
-        claimCount: 0,
-        claimRate: '0%',
-        isLastInGroup: true,
-      },
-    ],
-  },
-  {
-    groupName: '工程險',
-    hasAlert: false,
-    premium: 13020,
-    claimAmount: 0,
-    lossRatio: '0%',
-    policyCount: 5,
-    customerCount: 5,
-    claimCount: 0,
-    claimRate: '0%',
-  },
-  {
-    groupName: '責任保險',
-    hasAlert: false,
-    premium: 37521,
-    claimAmount: 23380,
-    lossRatio: '62.3%',
-    policyCount: 21,
-    customerCount: 19,
-    claimCount: 2,
-    claimRate: '10.5%',
-    items: [
-      {
-        name: '公共意外',
-        hasAlert: false,
-        premium: 6000,
-        claimAmount: 0,
-        lossRatio: '0%',
-        policyCount: 3,
-        customerCount: 3,
-        claimCount: 0,
-        claimRate: '0%',
-        isLastInGroup: false,
-      },
-      {
-        name: '雇主責任',
-        hasAlert: false,
-        premium: 21521,
-        claimAmount: 23380,
-        lossRatio: '108.6%',
-        policyCount: 14,
-        customerCount: 12,
-        claimCount: 2,
-        claimRate: '16.7%',
-        isLastInGroup: false,
-      },
-      {
-        name: '產品責任',
-        hasAlert: false,
-        premium: 10000,
-        claimAmount: 0,
-        lossRatio: '0%',
-        policyCount: 4,
-        customerCount: 4,
-        claimCount: 0,
-        claimRate: '0%',
-        isLastInGroup: false,
-      },
-      {
-        name: '營繕承包人意外',
-        hasAlert: false,
-        premium: 10000,
-        claimAmount: 0,
-        lossRatio: '0%',
-        policyCount: 4,
-        customerCount: 4,
-        claimCount: 0,
-        claimRate: '0%',
-        isLastInGroup: true,
-      },
-    ],
-  },
-]
+const metricPremium: MetricCardProps = {
+  label: '總保費 (元)',
+  value: '1,742,766',
+  subLabel: '保單數：共',
+  subValue: '307',
+  subUnit: '張',
+}
+
+const metricClaim: MetricCardProps = {
+  label: '總理賠金額 (元)',
+  value: '1,389,222',
+  subLabel: '賠案數：共',
+  subValue: '28',
+  subUnit: '張',
+}
+
+const tableData: InsuranceTableProps = {
+  categories: [
+    {
+      categoryName: '任意車險',
+      premium: '1,114,665',
+      claimAmount: '1,165,918',
+      lossRatio: '105.0%',
+      policyCount: '101',
+      customerCount: '41',
+      claimCount: '17',
+      customerClaimRate: '22.0%',
+      hasAlert: true,
+      subCategories: undefined,
+    },
+    {
+      categoryName: 'A&H',
+      premium: '577,560',
+      claimAmount: '199,924',
+      lossRatio: '34.6%',
+      policyCount: '180',
+      customerCount: '43',
+      claimCount: '9',
+      customerClaimRate: '20.9%',
+      hasAlert: false,
+      subCategories: [
+        {
+          categoryName: '個傷',
+          premium: '576,258',
+          claimAmount: '199,924',
+          lossRatio: '34.7%',
+          policyCount: '174',
+          customerCount: '42',
+          claimCount: '9',
+          customerClaimRate: '21.4%',
+          hasAlert: true,
+        },
+        {
+          categoryName: '個健',
+          premium: '1,302',
+          claimAmount: '0',
+          lossRatio: '0%',
+          policyCount: '6',
+          customerCount: '1',
+          claimCount: '0',
+          customerClaimRate: '0%',
+          hasAlert: false,
+        },
+      ],
+    },
+    {
+      categoryName: '工程險',
+      premium: '13,020',
+      claimAmount: '0',
+      lossRatio: '0%',
+      policyCount: '5',
+      customerCount: '5',
+      claimCount: '0',
+      customerClaimRate: '0%',
+      hasAlert: false,
+      subCategories: undefined,
+    },
+    {
+      categoryName: '責任保險',
+      premium: '37,521',
+      claimAmount: '23,380',
+      lossRatio: '62.3%',
+      policyCount: '21',
+      customerCount: '19',
+      claimCount: '2',
+      customerClaimRate: '10.5%',
+      hasAlert: false,
+      subCategories: [
+        {
+          categoryName: '公共意外',
+          premium: '6,000',
+          claimAmount: '0',
+          lossRatio: '0%',
+          policyCount: '3',
+          customerCount: '3',
+          claimCount: '0',
+          customerClaimRate: '0%',
+          hasAlert: false,
+        },
+        {
+          categoryName: '雇主責任',
+          premium: '21,521',
+          claimAmount: '23,380',
+          lossRatio: '108.6%',
+          policyCount: '14',
+          customerCount: '12',
+          claimCount: '2',
+          customerClaimRate: '16.7%',
+          hasAlert: false,
+        },
+        {
+          categoryName: '產品責任',
+          premium: '10,000',
+          claimAmount: '0',
+          lossRatio: '0%',
+          policyCount: '4',
+          customerCount: '4',
+          claimCount: '0',
+          customerClaimRate: '0%',
+          hasAlert: false,
+        },
+        {
+          categoryName: '營繕承包人意外',
+          premium: '10,000',
+          claimAmount: '0',
+          lossRatio: '0%',
+          policyCount: '4',
+          customerCount: '4',
+          claimCount: '0',
+          customerClaimRate: '0%',
+          hasAlert: false,
+        },
+      ],
+    },
+  ],
+}
+
+function onTabChange(index: number) {
+  tabData.value.activeIndex = index
+}
+
+function onDateRangeChange(index: number) {
+  dateRangeData.value.selectedIndex = index
+}
 </script>
 
 <template>
-  <!-- Figma: 9714:25867 | 業務員整頁 | 1440px, bg:#E1F0FA -->
   <div class="agent-analysis-page">
-    <!-- Figma: 9714:25873 | Header -->
-    <AppHeader systemName="業務員全視圖" />
+    <!-- Header -->
+    <AppHeader />
 
-    <!-- Page content: padded 90px each side -->
-    <div class="agent-analysis-page__content">
-      <!-- Figma: 9714:25943 | BasicInfoSection -->
-      <BasicInfoSection :agentInfo="agentInfo" />
+    <!-- Basic Info Section -->
+    <div class="agent-analysis-page__basic-info">
+      <WarningBanner v-bind="warningData" />
+      <AgentBasicInfoCard v-bind="basicInfoData" />
+    </div>
 
-      <!-- Figma: 9714:25942 | SummaryAlertCard -->
-      <SummaryAlertCard
-        :complaintTotal="3"
-        :complaintRecentCount="1"
-        noteDate="2019/06/06"
-      />
+    <!-- Summary Alert -->
+    <SummaryAlert
+      v-bind="summaryData"
+      class="agent-analysis-page__summary"
+    />
 
-      <!-- Figma: 9714:25868 | TabGroup -->
-      <TabGroup
-        :tabs="tabs"
-        :activeTab="activeTab"
-        @tab-change="activeTab = $event"
-      />
+    <!-- Tab Group -->
+    <TabGroup
+      v-bind="tabData"
+      class="agent-analysis-page__tabs"
+      @update:active-index="onTabChange"
+    />
 
-      <!-- Figma: 9714:25872 | Tab content white card -->
-      <div class="agent-analysis-page__tab-card">
-        <!-- Figma: Tab 1 綜合分析 -->
-        <ComprehensiveAnalysisTab
-          v-if="activeTab === 'comprehensive'"
-          :metrics="metrics"
-          :groups="groups"
-          :scope="scope"
-        />
-        <!-- Figma: Tab 2 任意車險 (PlaceholderTab) -->
-        <PlaceholderTab
-          v-else-if="activeTab === 'car'"
-          tabTitle="任意車險"
-        />
-        <!-- Figma: Tab 3 個傷 (PlaceholderTab) -->
-        <PlaceholderTab
-          v-else-if="activeTab === 'personal'"
-          tabTitle="個傷"
-        />
+    <!-- Content Card -->
+    <div class="agent-analysis-page__card">
+      <!-- Agent Content -->
+      <div class="agent-analysis-page__content">
+        <!-- Title + Date Range -->
+        <div class="agent-analysis-page__title-set">
+          <div class="agent-analysis-page__title-row">
+            <h2 class="agent-analysis-page__title">整體綜合表現</h2>
+          </div>
+          <DateRangeSelect
+            v-bind="dateRangeData"
+            @update:selected-index="onDateRangeChange"
+          />
+        </div>
+
+        <!-- Scope Description -->
+        <ScopeDescription v-bind="scopeData" />
+
+        <!-- Metrics -->
+        <div class="agent-analysis-page__metrics">
+          <MetricCard v-bind="metricPremium" />
+          <MetricCard v-bind="metricClaim" />
+        </div>
+
+        <!-- Insurance Table -->
+        <InsuranceTable v-bind="tableData" />
       </div>
     </div>
   </div>
@@ -237,27 +281,80 @@ const groups: InsuranceGroup[] = [
 
 <style lang="scss" scoped>
 .agent-analysis-page {
-  min-width: 1440px;
+  width: 1440px;
   min-height: 1698px;
-  background-color: #e1f0fa;
+  background: #e1f0fa;
+  position: relative;
 
-  &__content {
-    width: 1260px; // 1440 - 90*2
-    margin: 0 auto;
-    padding: 24px 0 60px;
+  &__basic-info {
     display: flex;
     flex-direction: column;
     gap: 12px;
+    width: 1260px;
+    position: absolute;
+    top: 90px;
+    left: 90px;
   }
 
-  &__tab-card {
-    // Figma: 9714:25872 | white card bg | x:90, y:452, w:1260, h:1156
-    background-color: #ffffff;
-    border-radius: 0 20px 20px 20px; // top-left aligns with active tab
-    box-shadow: 0px 6px 16px 0px rgba(23, 33, 34, 0.04);
-    padding: 40px 60px;
+  &__summary {
+    position: absolute;
+    top: 298px;
+    left: 90px;
+  }
+
+  &__tabs {
+    position: absolute;
+    top: 402px;
+    left: 90px;
+  }
+
+  &__card {
+    position: absolute;
+    top: 452px;
+    left: 90px;
+    width: 1260px;
     min-height: 1156px;
-    box-sizing: border-box;
+    background: #ffffff;
+    box-shadow: 0px 6px 16px 0px rgba(23, 33, 34, 0.04);
+  }
+
+  &__content {
+    display: flex;
+    flex-direction: column;
+    gap: 30px;
+    position: absolute;
+    top: 40px;
+    left: 60px;
+  }
+
+  &__title-set {
+    display: flex;
+    justify-content: space-between;
+    gap: 30px;
+    padding: 0 0 20px;
+    width: 1140px;
+  }
+
+  &__title-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  &__title {
+    font-family: 'Noto Sans TC', sans-serif;
+    font-weight: 500;
+    font-size: 24px;
+    line-height: 1.5;
+    color: #172122;
+    margin: 0;
+  }
+
+  &__metrics {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 0 0 20px;
   }
 }
 </style>
