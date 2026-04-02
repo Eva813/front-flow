@@ -5,3 +5,5 @@ import AgentAnalysisPage from './pages/AgentAnalysisPage.vue'
 <template>
   <AgentAnalysisPage />
 </template>
+
+<style scoped></style>
